@@ -19,6 +19,10 @@ class DatasetViewer:
         self.task_type = ""
 
     def load_sidebar(self):
+        '''
+        加载侧边栏
+        :return:
+        '''
         with st.sidebar:
             st.header("设置")
             self.image_folder_path = st.text_input("输入图像文件夹路径:", value="")
@@ -34,6 +38,10 @@ class DatasetViewer:
             self.task_type = st.selectbox("选择任务类型:", task_options)
 
     def visual_classification(self):
+        '''
+        可视化分类
+        :return:
+        '''
         if self.image_folder_path:
             image_files = os.listdir(self.image_folder_path)
             supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
@@ -76,6 +84,10 @@ class DatasetViewer:
             st.warning("请输入图像文件夹路径。")
 
     def visual_detection(self):
+        '''
+        可视化检测
+        :return:
+        '''
         if self.image_folder_path:
             image_files = os.listdir(self.image_folder_path)
             supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
@@ -121,23 +133,25 @@ class DatasetViewer:
                                         class_name = self.class_names[int(class_id)]
                                     else:
                                         class_name = str(int(class_id))
-                                    cv2.putText(image_cv, class_name, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                                    image_cv = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
 
+                                cv2.putText(image_cv, class_name, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                                image_cv = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
                                 col1, col2 = st.columns(2)
                                 col1.image(image, caption="src", use_column_width=True)
                                 col2.image(image_cv, caption="dst", use_column_width=True)
 
                                 st.write("标注内容:")
                                 st.write(content)
-                        # else:
-                        #     st.warning("未找到对应的标注文件。请确保图像和标注文件具有相同的文件名。")
                     else:
                         st.warning("请输入标签文件夹路径。")
             else:
                 st.warning("请输入图像文件夹路径。")
 
     def visual_segmentation(self):
+        '''
+        可视化分割
+        :return:
+        '''
         if self.image_folder_path:
             image_files = os.listdir(self.image_folder_path)
             supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
