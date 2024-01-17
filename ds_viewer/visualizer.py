@@ -7,7 +7,6 @@ import random
 import json
 import numpy as np
 
-
 class DatasetViewer:
     def __init__(self):
         self.image_folder_path = ""
@@ -17,6 +16,11 @@ class DatasetViewer:
         self.image_files = []
         self.label_files = []
         self.task_type = ""
+        self.image_index = 0
+
+    def get_files(self, folder_path, supported_formats):
+        files = os.listdir(folder_path)
+        return [file for file in files if any(file.endswith(fmt) for fmt in supported_formats)]
 
     def load_sidebar(self):
         '''
@@ -37,32 +41,33 @@ class DatasetViewer:
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
 
+    def draw_mask(self, image, mask, colors):
+        mask_color = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
+        for i in range(len(colors)):
+            mask_color[mask == i] = colors[i]
+        blend = cv2.addWeighted(np.array(image), 0.7, mask_color, 0.3, 0)
+        return blend
+
     def visual_classification(self):
         '''
         可视化分类
         :return:
         '''
         if self.image_folder_path:
-            image_files = os.listdir(self.image_folder_path)
-            supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
-            images = [file for file in image_files if any(file.endswith(fmt) for fmt in supported_formats)]
-
+            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,
-                                                  value=0)
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=image_index)
+            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
+            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
                 image_path = os.path.join(self.image_folder_path, image_file)
                 image = Image.open(image_path)
 
                 if self.label_folder_path:
-                    label_files = os.listdir(self.label_folder_path)
-                    supported_formats = [".txt", ".json", ".xml"]
-                    labels = [file for file in label_files if any(file.endswith(fmt) for fmt in supported_formats)]
+                    labels = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
 
                     if not labels:
                         st.warning("标签文件夹中没有找到支持的标签格式。请检查路径和标签格式。")
@@ -74,8 +79,7 @@ class DatasetViewer:
                             content = file.read()
 
                             st.image(image, caption="src", use_column_width=True)
-                            st.write("标签内容:")
-                            st.write(content)
+                            st.text_area("标签内容:", value=content, height=200)
                     else:
                         st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
                 else:
@@ -83,69 +87,110 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
+    def parse_yolo(self, content):
+        # 解析yolo格式的标签文件
+        lines = content.strip().split('\n')
+        parsed_content = []
+        for line in lines:
+            values = line.split()
+            class_id, x, y, w, h = values
+            parsed_content.append((class_id, float(x), float(y), float(w), float(h)))
+        return parsed_content
+
+    def parse_xml(self, content):
+        from xml.etree import ElementTree as ET
+        # 解析xml格式的标签文件
+        root = ET.fromstring(content)
+        parsed_content = []
+        for obj in root.findall('object'):
+            name = obj.find('name').text
+            bndbox = obj.find('bndbox')
+            xmin, ymin, xmax, ymax = [int(bndbox.find(coord).text) for coord in ['xmin', 'ymin', 'xmax', 'ymax']]
+            parsed_content.append((name, xmin, ymin, xmax - xmin, ymax - ymin))
+        return parsed_content
+
+    def parse_json(self, content):
+        # 解析json格式的标签文件
+        data = json.loads(content)
+        parsed_content = []
+        for item in data:
+            class_name = item['class']
+            x, y, w, h = item['bbox']
+            parsed_content.append((class_name, x, y, w, h))
+        return parsed_content
+
+    def draw_bbox(self, image_cv, bboxes):
+        class_colors = {}
+        for bbox in bboxes:
+            class_name, x, y, w, h = bbox
+            if class_name not in class_colors:
+                # 为每个类别分配一个随机颜色
+                class_colors[class_name] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+            pt1 = (int(x), int(y))
+            pt2 = (int(x + w), int(y + h))
+            color = class_colors[class_name]
+            cv2.rectangle(image_cv, pt1, pt2, color, 2)
+            cv2.putText(image_cv, class_name, (int(x), int(y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        image_cv = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
+        return image_cv
+
     def visual_detection(self):
         '''
         可视化检测
         :return:
         '''
         if self.image_folder_path:
-            image_files = os.listdir(self.image_folder_path)
-            supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
-            images = [file for file in image_files if any(file.endswith(fmt) for fmt in supported_formats)]
-
+            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,
-                                                  value=0)
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=image_index)
+            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
+            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
                 image_path = os.path.join(self.image_folder_path, image_file)
                 image = Image.open(image_path)
 
                 if self.label_folder_path:
-                    label_files = os.listdir(self.label_folder_path)
-                    supported_formats = [".txt", ".json", ".xml"]
-                    annotations = [file for file in label_files if any(file.endswith(fmt) for fmt in supported_formats)]
+                    annotations = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
 
                     if not annotations:
                         st.warning("标签文件夹中没有找到支持的标注格式。请检查路径和标注格式。")
                         return
 
-                    annotation_file = os.path.splitext(image_file)[0] + ".txt"
-                    if annotation_file in annotations:
+                    label_ext = None
+                    for ext in [".txt", ".json", ".xml"]:
+                        annotation_file = os.path.splitext(image_file)[0] + ext
+                        if annotation_file in annotations:
+                            label_ext = ext
+                            break
+
+                    if label_ext:
                         with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
                             content = file.read()
+
+                            if label_ext == ".txt":
+                                bboxes = self.parse_yolo(content)
+                            elif label_ext == ".xml":
+                                bboxes = self.parse_xml(content)
+                            elif label_ext == ".json":
+                                bboxes = self.parse_json(content)
+
                             image_cv = cv2.imread(image_path)
-                            height, width, _ = image_cv.shape
-                            with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
-                                for line in file.readlines():
-                                    class_id, x, y, w, h = map(float, line.strip().split())
-                                    x_min = int((x - w / 2) * width)
-                                    x_max = int((x + w / 2) * width)
-                                    y_min = int((y - h / 2) * height)
-                                    y_max = int((y + h / 2) * height)
-                                    color = self.colors[int(class_id)]
-                                    cv2.rectangle(image_cv, (x_min, y_min), (x_max, y_max), color, 2)
-                                    if self.class_names:
-                                        class_name = self.class_names[int(class_id)]
-                                    else:
-                                        class_name = str(int(class_id))
-
-                                cv2.putText(image_cv, class_name, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                                image_cv = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
-                                col1, col2 = st.columns(2)
-                                col1.image(image, caption="src", use_column_width=True)
-                                col2.image(image_cv, caption="dst", use_column_width=True)
-
-                                st.write("标注内容:")
-                                st.write(content)
+                            image_cv = self.draw_bbox(image_cv, bboxes)
+                            col1, col2 = st.columns(2)
+                            col1.image(image, caption="src", use_column_width=True)
+                            col2.image(image_cv, caption="dst", use_column_width=True)
+                            st.text_area("标签内容:", value=content, height=200)
                     else:
-                        st.warning("请输入标签文件夹路径。")
-            else:
-                st.warning("请输入图像文件夹路径。")
+                        st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
+                else:
+                    st.warning("请输入标签文件夹路径。")
+        else:
+            st.warning("请输入图像文件夹路径。")
+
 
     def visual_segmentation(self):
         '''
@@ -153,27 +198,20 @@ class DatasetViewer:
         :return:
         '''
         if self.image_folder_path:
-            image_files = os.listdir(self.image_folder_path)
-            supported_formats = [".jpg", ".png", ".jpeg", ".bmp", ".tiff"]
-            images = [file for file in image_files if any(file.endswith(fmt) for fmt in supported_formats)]
-
+            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,
-                                                  value=0)
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=image_index)
+            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
+            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
                 image_path = os.path.join(self.image_folder_path, image_file)
                 image = Image.open(image_path)
 
                 if self.label_folder_path:
-                    label_files = os.listdir(self.label_folder_path)
-                    supported_formats = [".png", ".bmp", ".tiff"]
-                    masks = [file for file in label_files if any(file.endswith(fmt) for fmt in supported_formats)]
-
+                    masks = self.get_files(self.label_folder_path, [".png", ".bmp", ".tiff"])
                     if not masks:
                         st.warning("标签文件夹中没有找到支持的分割掩码格式。请检查路径和掩码格式。")
                         return
@@ -191,12 +229,7 @@ class DatasetViewer:
                             st.warning("图像和分割掩码的尺寸不匹配。请确保它们具有相同的尺寸。")
                             return
 
-                        mask_color = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-                        for i in range(len(self.colors)):
-                            mask_color[mask == i] = self.colors[i]
-
-                        blend = cv2.addWeighted(np.array(image), 0.7, mask_color, 0.3, 0)
-
+                        blend = self.draw_mask(image, mask, self.colors)
                         col1, col2 = st.columns(2)
                         col1.image(image, caption="src", use_column_width=True)
                         col2.image(blend, caption="dst", use_column_width=True)
@@ -207,13 +240,27 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
+    def load_image_preview(self):
+        if self.image_folder_path and self.image_index is not None:
+            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            if images:
+                image_file = images[self.image_index]
+                image_path = os.path.join(self.image_folder_path, image_file)
+                image = Image.open(image_path)
+                st.sidebar.image(image, caption="预览", width=100)
+            else:
+                st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
+
     def visual(self):
         if self.task_type == "分类":
             self.visual_classification()
+            self.load_image_preview()
         elif self.task_type == "检测":
             self.visual_detection()
+            self.load_image_preview()
         elif self.task_type == "分割":
             self.visual_segmentation()
+            self.load_image_preview()
         else:
             st.warning("请选择任务类型")
 
