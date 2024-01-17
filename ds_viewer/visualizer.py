@@ -109,14 +109,38 @@ class DatasetViewer:
             parsed_content.append((name, xmin, ymin, xmax - xmin, ymax - ymin))
         return parsed_content
 
-    def parse_json(self, content):
-        # 解析json格式的标签文件
+    # def parse_json(self, content):
+    #     # 解析json格式的标签文件
+    #     data = json.loads(content)
+    #     parsed_content = []
+    #     for item in data:
+    #         # class_name = item['class']
+    #         if 'class' in item:
+    #             class_name = item['class']
+    #         else:
+    #             class_name = item['classes']
+    #
+    #         x, y, w, h = item['bbox']
+    #         parsed_content.append((class_name, x, y, w, h))
+    #     return parsed_content
+    def parse_json(self, content, image_file):
+        # 解析COCO数据集格式的json标签文件
         data = json.loads(content)
+        image_id = None
+        for img in data['images']:
+            if img['file_name'] == image_file:
+                image_id = img['id']
+                break
+
+        if image_id is None:
+            return []
+
         parsed_content = []
-        for item in data:
-            class_name = item['class']
-            x, y, w, h = item['bbox']
-            parsed_content.append((class_name, x, y, w, h))
+        for ann in data['annotations']:
+            if ann['image_id'] == image_id:
+                class_id = ann['category_id']
+                x, y, w, h = ann['bbox']
+                parsed_content.append((class_id, x, y, w, h))
         return parsed_content
 
     def draw_bbox(self, image_cv, bboxes):
@@ -176,7 +200,8 @@ class DatasetViewer:
                             elif label_ext == ".xml":
                                 bboxes = self.parse_xml(content)
                             elif label_ext == ".json":
-                                bboxes = self.parse_json(content)
+                                bboxes = self.parse_json(content, image_file)
+                                # bboxes = self.parse_json(content)
 
                             image_cv = cv2.imread(image_path)
                             image_cv = self.draw_bbox(image_cv, bboxes)
