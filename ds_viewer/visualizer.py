@@ -19,6 +19,12 @@ class DatasetViewer:
         self.image_index = 0
 
     def get_files(self, folder_path, supported_formats):
+        '''
+        获取文件
+        :param folder_path:
+        :param supported_formats:
+        :return:
+        '''
         files = os.listdir(folder_path)
         return [file for file in files if any(file.endswith(fmt) for fmt in supported_formats)]
 
@@ -42,6 +48,13 @@ class DatasetViewer:
             self.task_type = st.selectbox("选择任务类型:", task_options)
 
     def draw_mask(self, image, mask, colors):
+        '''
+        绘制掩码
+        :param image:
+        :param mask:
+        :param colors:
+        :return:
+        '''
         mask_color = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
         for i in range(len(colors)):
             mask_color[mask == i] = colors[i]
@@ -87,17 +100,37 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
-    def parse_yolo(self, content):
+    def parse_yolo(self, content, image_cv):
+        '''
+        解析yolo格式的标签文件
+        :param content:
+        :param image_cv:
+        :return:
+        '''
+        # 获取图像的宽度和高度
+        img_height, img_width = image_cv.shape[:2]
+
         # 解析yolo格式的标签文件
         lines = content.strip().split('\n')
         parsed_content = []
         for line in lines:
-            values = line.split()
-            class_id, x, y, w, h = values
-            parsed_content.append((class_id, float(x), float(y), float(w), float(h)))
+            class_id, x, y, w, h = map(float, line.strip().split())
+            x_min = int((x - w / 2) * img_width)
+            x_max = int((x + w / 2) * img_width)
+            y_min = int((y - h / 2) * img_height)
+            y_max = int((y + h / 2) * img_height)
+            class_id_str = str(int(class_id))
+            w_ori = x_max - x_min
+            h_ori = y_max - y_min
+            parsed_content.append((class_id_str, x_min, y_min, w_ori, h_ori))
         return parsed_content
 
     def parse_xml(self, content):
+        '''
+        解析xml格式的标签文件
+        :param content:
+        :return:
+        '''
         from xml.etree import ElementTree as ET
         # 解析xml格式的标签文件
         root = ET.fromstring(content)
@@ -110,6 +143,11 @@ class DatasetViewer:
         return parsed_content
 
     def parse_single_json(self, content):
+        '''
+        解析单个图像对应的COCO数据集格式的json标签文件
+        :param content:
+        :return:
+        '''
         # 解析与单个图像对应的COCO数据集格式的json标签文件或自定义格式的json标签文件
         data = json.loads(content)
 
@@ -141,6 +179,12 @@ class DatasetViewer:
         return parsed_content
 
     def parse_json(self, content, image_file):
+        '''
+        解析COCO数据集格式的json标签文件
+        :param content:
+        :param image_file:
+        :return:
+        '''
         image_file = image_file.split('.')[0]
         print("image_file:", image_file)
         # 解析COCO数据集格式的json标签文件
@@ -167,6 +211,12 @@ class DatasetViewer:
         return parsed_content
 
     def draw_bbox(self, image_cv, bboxes):
+        '''
+        绘制边界框
+        :param image_cv:
+        :param bboxes:
+        :return:
+        '''
         class_colors = {}
         for bbox in bboxes:
             class_name, x, y, w, h = bbox
@@ -238,9 +288,10 @@ class DatasetViewer:
                     if label_ext:
                         with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
                             content = file.read()
-
+                            image_cv = cv2.imread(image_path)
                             if label_ext == ".txt":
-                                bboxes = self.parse_yolo(content)
+                                # bboxes = self.parse_yolo(content)
+                                bboxes = self.parse_yolo(content, image_cv)
                             elif label_ext == ".xml":
                                 bboxes = self.parse_xml(content)
                             elif label_ext == ".json":
@@ -248,9 +299,8 @@ class DatasetViewer:
                                     bboxes = self.parse_json(content, image_file)
                                 else:
                                     bboxes = self.parse_single_json(content)
-                            content = json.dumps(bboxes, indent=4)
-
-                            image_cv = cv2.imread(image_path)
+                                content = json.dumps(bboxes, indent=4)
+                            # image_cv = cv2.imread(image_path)
                             image_cv = self.draw_bbox(image_cv, bboxes)
                             col1, col2 = st.columns(2)
                             col1.image(image, caption="src", use_column_width=True)
@@ -313,6 +363,10 @@ class DatasetViewer:
             st.warning("请输入图像文件夹路径。")
 
     def load_image_preview(self):
+        '''
+        加载图像预览
+        :return:
+        '''
         if self.image_folder_path and self.image_index is not None:
             images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
@@ -344,5 +398,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
