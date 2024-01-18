@@ -109,21 +109,11 @@ class DatasetViewer:
             parsed_content.append((name, xmin, ymin, xmax - xmin, ymax - ymin))
         return parsed_content
 
-    # def parse_json(self, content):
-    #     # 解析json格式的标签文件
-    #     data = json.loads(content)
-    #     parsed_content = []
-    #     for item in data:
-    #         # class_name = item['class']
-    #         if 'class' in item:
-    #             class_name = item['class']
-    #         else:
-    #             class_name = item['classes']
-    #
-    #         x, y, w, h = item['bbox']
-    #         parsed_content.append((class_name, x, y, w, h))
-    #     return parsed_content
+
+
     def parse_json(self, content, image_file):
+        image_file = image_file.split('.')[0]
+        print("image_file:", image_file)
         # 解析COCO数据集格式的json标签文件
         data = json.loads(content)
         image_id = None
@@ -135,12 +125,16 @@ class DatasetViewer:
         if image_id is None:
             return []
 
+        # 创建一个字典，将category_id映射到class_name
+        id_to_name = {cat['id']: cat['name'] for cat in data['categories']}
+
         parsed_content = []
         for ann in data['annotations']:
             if ann['image_id'] == image_id:
                 class_id = ann['category_id']
+                class_name = id_to_name[class_id]  # 从id_to_name字典中获取class_name
                 x, y, w, h = ann['bbox']
-                parsed_content.append((class_id, x, y, w, h))
+                parsed_content.append((class_name, x, y, w, h))  # 使用class_name而不是class_id
         return parsed_content
 
     def draw_bbox(self, image_cv, bboxes):
@@ -164,6 +158,7 @@ class DatasetViewer:
         可视化检测
         :return:
         '''
+        annotation_file = ''
         if self.image_folder_path:
             images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
@@ -186,11 +181,24 @@ class DatasetViewer:
 
                     label_ext = None
                     for ext in [".txt", ".json", ".xml"]:
-                        annotation_file = os.path.splitext(image_file)[0] + ext
-                        if annotation_file in annotations:
-                            label_ext = ext
-                            break
+                        if ext == ".json":
+                            instance_coco_train_json = 'instances_train2017.json'
+                            instance_coco_val_json = 'instances_val2017.json'
+                            train_coco_json = os.path.join(self.label_folder_path, instance_coco_train_json)
+                            val_coco_json = os.path.join(self.label_folder_path, instance_coco_val_json)
+                            print("train_coco_json:", train_coco_json)
+                            print("val_coco_json:", val_coco_json)
+                            if os.path.exists(train_coco_json) or os.path.exists(val_coco_json):
+                                label_ext = ext
+                                annotation_file = instance_coco_train_json if os.path.exists(train_coco_json) else instance_coco_val_json
+                                break
+                        elif ext == ".xml" or ext == ".txt":
+                            annotation_file = os.path.splitext(image_file)[0] + ext
+                            if annotation_file in annotations:
+                                label_ext = ext
+                                break
 
+                    print("label_ext:", label_ext)
                     if label_ext:
                         with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
                             content = file.read()
@@ -201,8 +209,8 @@ class DatasetViewer:
                                 bboxes = self.parse_xml(content)
                             elif label_ext == ".json":
                                 bboxes = self.parse_json(content, image_file)
-                                # bboxes = self.parse_json(content)
-
+                                content = json.dumps(bboxes, indent=4)
+                            print("bboxes:", bboxes)
                             image_cv = cv2.imread(image_path)
                             image_cv = self.draw_bbox(image_cv, bboxes)
                             col1, col2 = st.columns(2)
