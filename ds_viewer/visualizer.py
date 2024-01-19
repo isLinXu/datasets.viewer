@@ -9,6 +9,8 @@ import numpy as np
 
 class DatasetViewer:
     def __init__(self):
+        self.bboxes = None
+        self.mask = None
         self.image_folder_path = ""
         self.label_folder_path = ""
         self.class_names = []
@@ -28,6 +30,7 @@ class DatasetViewer:
         files = os.listdir(folder_path)
         return [file for file in files if any(file.endswith(fmt) for fmt in supported_formats)]
 
+
     def load_sidebar(self):
         '''
         加载侧边栏
@@ -46,6 +49,31 @@ class DatasetViewer:
 
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
+            if os.path.exists(self.image_folder_path):
+                images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+                self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
+                # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+
+                if st.sidebar.button("保存可视化结果"):
+                    if self.image_folder_path and self.image_index is not None:
+                        images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+                        if images:
+                            image_file = images[self.image_index]
+                            image_path = os.path.join(self.image_folder_path, image_file)
+                            image = Image.open(image_path)
+                            self.save_visual_result(image, self.task_type)
+                        else:
+                            st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
+                    else:
+                        st.sidebar.warning("请输入图像文件夹路径。")
+
+                if st.sidebar.button("转换并导出标签"):
+                    src_format = st.sidebar.text_input("输入源标签格式（例如：yolo、xml、json）:", value="")
+                    dst_format = st.sidebar.text_input("输入目标标签格式（例如：yolo、xml、json）:", value="")
+                    if src_format and dst_format:
+                        self.convert_and_export_labels(src_format, dst_format)
+                    else:
+                        st.sidebar.warning("请输入源标签格式和目标标签格式。")
 
     def draw_mask(self, image, mask, colors):
         '''
@@ -72,7 +100,7 @@ class DatasetViewer:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
+            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
             image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
@@ -125,6 +153,76 @@ class DatasetViewer:
             parsed_content.append((class_id_str, x_min, y_min, w_ori, h_ori))
         return parsed_content
 
+    def parse_label(self, image_file, show_image=True):
+        annotation_file = ''
+        instance_coco_train_json = ''
+        instance_coco_val_json = ''
+        image_path = os.path.join(self.image_folder_path, image_file)
+        image = Image.open(image_path)
+        if self.label_folder_path:
+            annotations = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+
+            if not annotations:
+                st.warning("标签文件夹中没有找到支持的标注格式。请检查路径和标注格式。")
+                return
+
+            label_ext = None
+            for ext in [".txt", ".json", ".xml"]:
+                if ext == ".json":
+                    single_json_file = os.path.splitext(image_file)[0] + ext
+                    single_json_path = os.path.join(self.label_folder_path, single_json_file)
+                    if os.path.exists(single_json_path):
+                        label_ext = ext
+                        annotation_file = single_json_file
+                        break
+                    else:
+                        instance_coco_train_json = 'instances_train2017.json'
+                        instance_coco_val_json = 'instances_val2017.json'
+                        train_coco_json = os.path.join(self.label_folder_path, instance_coco_train_json)
+                        val_coco_json = os.path.join(self.label_folder_path, instance_coco_val_json)
+                        if os.path.exists(train_coco_json) or os.path.exists(val_coco_json):
+                            label_ext = ext
+                            annotation_file = instance_coco_train_json if os.path.exists(
+                                train_coco_json) else instance_coco_val_json
+                            break
+                elif ext == ".xml" or ext == ".txt":
+                    annotation_file = os.path.splitext(image_file)[0] + ext
+                    if annotation_file in annotations:
+                        label_ext = ext
+                        break
+
+            if label_ext:
+                with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
+                    content = file.read()
+                    image_cv = cv2.imread(image_path)
+                    if label_ext == ".txt":
+                        bboxes = self.parse_yolo(content, image_cv)
+                    elif label_ext == ".xml":
+                        bboxes = self.parse_xml(content)
+                    elif label_ext == ".json":
+                        if annotation_file in [instance_coco_train_json, instance_coco_val_json]:
+                            bboxes = self.parse_json(content, image_file)
+                        else:
+                            bboxes = self.parse_single_json(content)
+                        content = json.dumps(bboxes, indent=4)
+
+                    if show_image:
+                        # 保存 bboxes 到实例变量中
+                        self.bboxes = bboxes
+
+                        image_cv = self.draw_bbox(image_cv, bboxes)
+                        col1, col2 = st.columns(2)
+                        col1.image(image, caption="src", use_column_width=True)
+                        col2.image(image_cv, caption="dst", use_column_width=True)
+                        # st.text_area("标签内容:", value=content, height=200)
+                        st.text_area("标签内容:", value=content, height=200,
+                                     key=f"label_content_{image_file}")
+            else:
+                st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
+        else:
+            st.warning("请输入标签文件夹路径。")
+        return bboxes, content
+
     def parse_xml(self, content):
         '''
         解析xml格式的标签文件
@@ -174,7 +272,7 @@ class DatasetViewer:
                 class_id = ann['category_id']
                 class_name = id_to_name[class_id]  # 从id_to_name字典中获取class_name
                 x, y, w, h = ann['bbox']
-                parsed_content.append((class_name, x, y, w, h))  # 使用class_name而不是class_id
+                parsed_content.append((class_name, x, y, w, h))
 
         return parsed_content
 
@@ -237,79 +335,17 @@ class DatasetViewer:
         可视化检测
         :return:
         '''
-        instance_coco_train_json = ''
-        instance_coco_val_json = ''
-        annotation_file = ''
         if self.image_folder_path:
             images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
+            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
             image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
-                image_path = os.path.join(self.image_folder_path, image_file)
-                image = Image.open(image_path)
-
-                if self.label_folder_path:
-                    annotations = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
-
-                    if not annotations:
-                        st.warning("标签文件夹中没有找到支持的标注格式。请检查路径和标注格式。")
-                        return
-
-                    label_ext = None
-                    for ext in [".txt", ".json", ".xml"]:
-                        if ext == ".json":
-                            single_json_file = os.path.splitext(image_file)[0] + ext
-                            single_json_path = os.path.join(self.label_folder_path, single_json_file)
-                            if os.path.exists(single_json_path):
-                                label_ext = ext
-                                annotation_file = single_json_file
-                                break
-                            else:
-                                instance_coco_train_json = 'instances_train2017.json'
-                                instance_coco_val_json = 'instances_val2017.json'
-                                train_coco_json = os.path.join(self.label_folder_path, instance_coco_train_json)
-                                val_coco_json = os.path.join(self.label_folder_path, instance_coco_val_json)
-                                if os.path.exists(train_coco_json) or os.path.exists(val_coco_json):
-                                    label_ext = ext
-                                    annotation_file = instance_coco_train_json if os.path.exists(
-                                        train_coco_json) else instance_coco_val_json
-                                    break
-                        elif ext == ".xml" or ext == ".txt":
-                            annotation_file = os.path.splitext(image_file)[0] + ext
-                            if annotation_file in annotations:
-                                label_ext = ext
-                                break
-
-                    if label_ext:
-                        with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
-                            content = file.read()
-                            image_cv = cv2.imread(image_path)
-                            if label_ext == ".txt":
-                                # bboxes = self.parse_yolo(content)
-                                bboxes = self.parse_yolo(content, image_cv)
-                            elif label_ext == ".xml":
-                                bboxes = self.parse_xml(content)
-                            elif label_ext == ".json":
-                                if annotation_file in [instance_coco_train_json, instance_coco_val_json]:
-                                    bboxes = self.parse_json(content, image_file)
-                                else:
-                                    bboxes = self.parse_single_json(content)
-                                content = json.dumps(bboxes, indent=4)
-                            # image_cv = cv2.imread(image_path)
-                            image_cv = self.draw_bbox(image_cv, bboxes)
-                            col1, col2 = st.columns(2)
-                            col1.image(image, caption="src", use_column_width=True)
-                            col2.image(image_cv, caption="dst", use_column_width=True)
-                            st.text_area("标签内容:", value=content, height=200)
-                    else:
-                        st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
-                else:
-                    st.warning("请输入标签文件夹路径。")
+                bboxes, content = self.parse_label(image_file)
         else:
             st.warning("请输入图像文件夹路径。")
 
@@ -325,7 +361,7 @@ class DatasetViewer:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
+            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
             image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
@@ -376,6 +412,43 @@ class DatasetViewer:
                 st.sidebar.image(image, caption="预览", width=100)
             else:
                 st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
+
+
+    def save_visual_result(self, image, task_type):
+        global result_image
+        save_path = os.path.join(self.image_folder_path, "visual_results")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        if self.image_folder_path and self.image_index is not None:
+            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            if images:
+                image_file = images[self.image_index]
+                # "分类", "检测", "分割"
+                if task_type == "分类":
+                    result_image = image
+                elif task_type == "检测":
+                    bboxes, content = self.parse_label(image_file, show_image=False)
+                    image_path = os.path.join(self.image_folder_path, image_file)
+                    image_cv = cv2.imread(image_path)
+                    image_cv = cv2.cvtColor(image_cv, cv2.COLOR_RGB2BGR)
+                    result_image = self.draw_bbox(image_cv, bboxes)
+                    result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+                elif task_type == "分割":
+                    # todo: 读取分割掩码
+                    image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                    result_image = self.draw_mask(image_cv, self.mask, self.colors)
+                    result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+                else:
+                    st.warning("未知的任务类型。结果图像未被保存。")
+
+            result_image = Image.fromarray(result_image)
+            result_image_path = os.path.join(save_path, f"{task_type}_result_{self.image_index}.png")
+            result_image.save(result_image_path)
+            st.success(f"已保存可视化结果到：{result_image_path}")
+
+    def convert_and_export_labels(self, src_format, dst_format):
+        # TODO: 实现不同标签格式之间的转换，并将结果保存到指定的文件夹
+        st.warning("标签格式转换功能尚未实现。")
 
     def visual(self):
         if self.task_type == "分类":
