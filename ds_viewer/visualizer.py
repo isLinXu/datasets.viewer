@@ -1,11 +1,14 @@
 
-import os
-import streamlit as st
 import cv2
 from PIL import Image
 import random
 import json
 import numpy as np
+
+import sys
+sys.path.insert(0, '/utils/')
+
+from utils.tools import *
 
 class DatasetViewer:
     def __init__(self):
@@ -19,17 +22,6 @@ class DatasetViewer:
         self.label_files = []
         self.task_type = ""
         self.image_index = 0
-
-    def get_files(self, folder_path, supported_formats):
-        '''
-        获取文件
-        :param folder_path:
-        :param supported_formats:
-        :return:
-        '''
-        files = os.listdir(folder_path)
-        return [file for file in files if any(file.endswith(fmt) for fmt in supported_formats)]
-
 
     def load_sidebar(self):
         '''
@@ -50,13 +42,13 @@ class DatasetViewer:
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
             if os.path.exists(self.image_folder_path):
-                images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+                images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
                 self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
                 # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
 
                 if st.sidebar.button("保存可视化结果"):
                     if self.image_folder_path and self.image_index is not None:
-                        images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+                        images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
                         if images:
                             image_file = images[self.image_index]
                             image_path = os.path.join(self.image_folder_path, image_file)
@@ -95,12 +87,11 @@ class DatasetViewer:
         :return:
         '''
         if self.image_folder_path:
-            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
 
-            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
             image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
 
             if image_file:
@@ -108,7 +99,7 @@ class DatasetViewer:
                 image = Image.open(image_path)
 
                 if self.label_folder_path:
-                    labels = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+                    labels = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
 
                     if not labels:
                         st.warning("标签文件夹中没有找到支持的标签格式。请检查路径和标签格式。")
@@ -160,7 +151,7 @@ class DatasetViewer:
         image_path = os.path.join(self.image_folder_path, image_file)
         image = Image.open(image_path)
         if self.label_folder_path:
-            annotations = self.get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+            annotations = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
 
             if not annotations:
                 st.warning("标签文件夹中没有找到支持的标注格式。请检查路径和标注格式。")
@@ -214,7 +205,6 @@ class DatasetViewer:
                         col1, col2 = st.columns(2)
                         col1.image(image, caption="src", use_column_width=True)
                         col2.image(image_cv, caption="dst", use_column_width=True)
-                        # st.text_area("标签内容:", value=content, height=200)
                         st.text_area("标签内容:", value=content, height=200,
                                      key=f"label_content_{image_file}")
             else:
@@ -336,7 +326,7 @@ class DatasetViewer:
         :return:
         '''
         if self.image_folder_path:
-            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
@@ -356,7 +346,7 @@ class DatasetViewer:
         :return:
         '''
         if self.image_folder_path:
-            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if not images:
                 st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
                 return
@@ -369,7 +359,7 @@ class DatasetViewer:
                 image = Image.open(image_path)
 
                 if self.label_folder_path:
-                    masks = self.get_files(self.label_folder_path, [".png", ".bmp", ".tiff"])
+                    masks = get_files(self.label_folder_path, [".png", ".bmp", ".tiff"])
                     if not masks:
                         st.warning("标签文件夹中没有找到支持的分割掩码格式。请检查路径和掩码格式。")
                         return
@@ -404,7 +394,7 @@ class DatasetViewer:
         :return:
         '''
         if self.image_folder_path and self.image_index is not None:
-            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
                 image_file = images[self.image_index]
                 image_path = os.path.join(self.image_folder_path, image_file)
@@ -420,7 +410,7 @@ class DatasetViewer:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         if self.image_folder_path and self.image_index is not None:
-            images = self.get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
                 image_file = images[self.image_index]
                 # "分类", "检测", "分割"
