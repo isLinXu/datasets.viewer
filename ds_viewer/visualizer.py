@@ -1,13 +1,10 @@
 
-import cv2
 from PIL import Image
-import random
-import json
-import numpy as np
-
 import sys
-sys.path.insert(0, '/utils/')
 
+sys.path.insert(0, '/utils/')
+from utils.draw import *
+from utils.labels import *
 from utils.tools import *
 
 class DatasetViewer:
@@ -67,19 +64,6 @@ class DatasetViewer:
                     else:
                         st.sidebar.warning("请输入源标签格式和目标标签格式。")
 
-    def draw_mask(self, image, mask, colors):
-        '''
-        绘制掩码
-        :param image:
-        :param mask:
-        :param colors:
-        :return:
-        '''
-        mask_color = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-        for i in range(len(colors)):
-            mask_color[mask == i] = colors[i]
-        blend = cv2.addWeighted(np.array(image), 0.7, mask_color, 0.3, 0)
-        return blend
 
     def visual_classification(self):
         '''
@@ -119,30 +103,6 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
-    def parse_yolo(self, content, image_cv):
-        '''
-        解析yolo格式的标签文件
-        :param content:
-        :param image_cv:
-        :return:
-        '''
-        # 获取图像的宽度和高度
-        img_height, img_width = image_cv.shape[:2]
-
-        # 解析yolo格式的标签文件
-        lines = content.strip().split('\n')
-        parsed_content = []
-        for line in lines:
-            class_id, x, y, w, h = map(float, line.strip().split())
-            x_min = int((x - w / 2) * img_width)
-            x_max = int((x + w / 2) * img_width)
-            y_min = int((y - h / 2) * img_height)
-            y_max = int((y + h / 2) * img_height)
-            class_id_str = str(int(class_id))
-            w_ori = x_max - x_min
-            h_ori = y_max - y_min
-            parsed_content.append((class_id_str, x_min, y_min, w_ori, h_ori))
-        return parsed_content
 
     def parse_label(self, image_file, show_image=True):
         annotation_file = ''
@@ -187,21 +147,22 @@ class DatasetViewer:
                     content = file.read()
                     image_cv = cv2.imread(image_path)
                     if label_ext == ".txt":
-                        bboxes = self.parse_yolo(content, image_cv)
+                        bboxes = parse_yolo(content, image_cv)
                     elif label_ext == ".xml":
-                        bboxes = self.parse_xml(content)
+                        bboxes = parse_xml(content)
                     elif label_ext == ".json":
                         if annotation_file in [instance_coco_train_json, instance_coco_val_json]:
-                            bboxes = self.parse_json(content, image_file)
+                            bboxes = parse_json(content, image_file)
                         else:
-                            bboxes = self.parse_single_json(content)
+                            bboxes = parse_single_json(content)
                         content = json.dumps(bboxes, indent=4)
 
                     if show_image:
                         # 保存 bboxes 到实例变量中
                         self.bboxes = bboxes
 
-                        image_cv = self.draw_bbox(image_cv, bboxes)
+                        # image_cv = self.draw_bbox(image_cv, bboxes)
+                        image_cv = draw_bbox(image_cv, bboxes)
                         col1, col2 = st.columns(2)
                         col1.image(image, caption="src", use_column_width=True)
                         col2.image(image_cv, caption="dst", use_column_width=True)
@@ -212,113 +173,6 @@ class DatasetViewer:
         else:
             st.warning("请输入标签文件夹路径。")
         return bboxes, content
-
-    def parse_xml(self, content):
-        '''
-        解析xml格式的标签文件
-        :param content:
-        :return:
-        '''
-        from xml.etree import ElementTree as ET
-        # 解析xml格式的标签文件
-        root = ET.fromstring(content)
-        parsed_content = []
-        for obj in root.findall('object'):
-            name = obj.find('name').text
-            bndbox = obj.find('bndbox')
-            xmin, ymin, xmax, ymax = [int(bndbox.find(coord).text) for coord in ['xmin', 'ymin', 'xmax', 'ymax']]
-            parsed_content.append((name, xmin, ymin, xmax - xmin, ymax - ymin))
-        return parsed_content
-
-    def parse_single_json(self, content):
-        '''
-        解析单个图像对应的COCO数据集格式的json标签文件
-        :param content:
-        :return:
-        '''
-        # 解析与单个图像对应的COCO数据集格式的json标签文件或自定义格式的json标签文件
-        data = json.loads(content)
-
-        if all(key in data for key in ["bbox", "masks", "mask_shape", "scores", "classes"]):
-            # 解析自定义格式的json标签文件
-            bboxes = data["bbox"]
-            class_ids = data["classes"]
-            id_to_name = {i: str(i) for i in set(class_ids)}  # 将类别ID映射到类别名称（字符串格式的ID）
-
-            parsed_content = []
-            for class_id, bbox in zip(class_ids, bboxes):
-                class_name = id_to_name[class_id]
-                x1, y1, x2, y2 = bbox
-                # 计算宽度和高度
-                w = x2 - x1
-                h = y2 - y1
-                parsed_content.append((class_name, x1, y1, w, h))
-        else:
-            # 解析COCO数据集格式的json标签文件
-            id_to_name = {cat['id']: cat['name'] for cat in data['categories']}
-
-            parsed_content = []
-            for ann in data['annotations']:
-                class_id = ann['category_id']
-                class_name = id_to_name[class_id]  # 从id_to_name字典中获取class_name
-                x, y, w, h = ann['bbox']
-                parsed_content.append((class_name, x, y, w, h))
-
-        return parsed_content
-
-    def parse_json(self, content, image_file):
-        '''
-        解析COCO数据集格式的json标签文件
-        :param content:
-        :param image_file:
-        :return:
-        '''
-        image_file = image_file.split('.')[0]
-        print("image_file:", image_file)
-        # 解析COCO数据集格式的json标签文件
-        data = json.loads(content)
-        image_id = None
-        for img in data['images']:
-            if img['file_name'] == image_file:
-                image_id = img['id']
-                break
-
-        if image_id is None:
-            return []
-
-        # 创建一个字典，将category_id映射到class_name
-        id_to_name = {cat['id']: cat['name'] for cat in data['categories']}
-
-        parsed_content = []
-        for ann in data['annotations']:
-            if ann['image_id'] == image_id:
-                class_id = ann['category_id']
-                class_name = id_to_name[class_id]  # 从id_to_name字典中获取class_name
-                x, y, w, h = ann['bbox']
-                parsed_content.append((class_name, x, y, w, h))  # 使用class_name而不是class_id
-        return parsed_content
-
-    def draw_bbox(self, image_cv, bboxes):
-        '''
-        绘制边界框
-        :param image_cv:
-        :param bboxes:
-        :return:
-        '''
-        class_colors = {}
-        for bbox in bboxes:
-            class_name, x, y, w, h = bbox
-            if class_name not in class_colors:
-                # 为每个类别分配一个随机颜色
-                class_colors[class_name] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-
-            pt1 = (int(x), int(y))
-            pt2 = (int(x + w), int(y + h))
-            color = class_colors[class_name]
-            cv2.rectangle(image_cv, pt1, pt2, color, 2)
-            cv2.putText(image_cv, class_name, (int(x), int(y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-        image_cv = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
-        return image_cv
 
     def visual_detection(self):
         '''
@@ -377,7 +231,7 @@ class DatasetViewer:
                             st.warning("图像和分割掩码的尺寸不匹配。请确保它们具有相同的尺寸。")
                             return
 
-                        blend = self.draw_mask(image, mask, self.colors)
+                        blend = draw_mask(image, mask, self.colors)
                         col1, col2 = st.columns(2)
                         col1.image(image, caption="src", use_column_width=True)
                         col2.image(blend, caption="dst", use_column_width=True)
@@ -421,12 +275,12 @@ class DatasetViewer:
                     image_path = os.path.join(self.image_folder_path, image_file)
                     image_cv = cv2.imread(image_path)
                     image_cv = cv2.cvtColor(image_cv, cv2.COLOR_RGB2BGR)
-                    result_image = self.draw_bbox(image_cv, bboxes)
+                    result_image = draw_bbox(image_cv, bboxes)
                     result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
                 elif task_type == "分割":
                     # todo: 读取分割掩码
                     image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-                    result_image = self.draw_mask(image_cv, self.mask, self.colors)
+                    result_image = draw_mask(image_cv, self.mask, self.colors)
                     result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
                 else:
                     st.warning("未知的任务类型。结果图像未被保存。")
