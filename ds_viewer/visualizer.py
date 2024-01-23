@@ -38,6 +38,13 @@ class DatasetViewer:
 
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
+            if self.task_type == "检测":
+                self.edit_label = st.checkbox("编辑标签")
+                if self.edit_label:
+                    self.edit_bbox_index = st.number_input("选择要编辑的边界框索引:", min_value=0,max_value=len(self.bboxes) - 1, step=1, value=0)
+                    self.new_class_name = st.text_input("输入新的类别名称（可选）:", value="")
+                    self.new_bbox = st.text_input("输入新的边界框坐标（格式：xmin,ymin,xmax,ymax，可选）:", value="")
+
             if os.path.exists(self.image_folder_path):
                 images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
                 self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
@@ -64,50 +71,52 @@ class DatasetViewer:
                     else:
                         st.sidebar.warning("请输入源标签格式和目标标签格式。")
 
+    def edit_labels(self):
+        if self.edit_label:
+            if self.new_class_name:
+                self.bboxes[self.edit_bbox_index]['class_name'] = self.new_class_name
+
+            if self.new_bbox:
+                xmin, ymin, xmax, ymax = [int(coord.strip()) for coord in self.new_bbox.split(",")]
+                self.bboxes[self.edit_bbox_index]['bbox'] = (xmin, ymin, xmax, ymax)
 
     def visual_classification(self):
         '''
         可视化分类
         :return:
         '''
-        if self.image_folder_path:
-            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-            if not images:
-                st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
-                return
+        image_file = load_images(self.image_folder_path, self.image_index)
+        if image_file:
+            image_path = os.path.join(self.image_folder_path, image_file)
+            image = Image.open(image_path)
 
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
+            if self.label_folder_path:
+                labels = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
 
-            if image_file:
-                image_path = os.path.join(self.image_folder_path, image_file)
-                image = Image.open(image_path)
+                if not labels:
+                    st.warning("标签文件夹中没有找到支持的标签格式。请检查路径和标签格式。")
+                    return
 
-                if self.label_folder_path:
-                    labels = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+                label_file = os.path.splitext(image_file)[0] + ".txt"
+                if label_file in labels:
+                    with open(os.path.join(self.label_folder_path, label_file), "r") as file:
+                        content = file.read()
 
-                    if not labels:
-                        st.warning("标签文件夹中没有找到支持的标签格式。请检查路径和标签格式。")
-                        return
-
-                    label_file = os.path.splitext(image_file)[0] + ".txt"
-                    if label_file in labels:
-                        with open(os.path.join(self.label_folder_path, label_file), "r") as file:
-                            content = file.read()
-
-                            st.image(image, caption="src", use_column_width=True)
-                            st.text_area("标签内容:", value=content, height=200)
-                    else:
-                        st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
+                        st.image(image, caption="src", use_column_width=True)
+                        st.text_area("标签内容:", value=content, height=200)
                 else:
-                    st.warning("请输入标签文件夹路径。")
+                    st.warning("未找到对应的标签文件。请确保图像和标签文件具有相同的文件名。")
+            else:
+                st.warning("请输入标签文件夹路径。")
         else:
             st.warning("请输入图像文件夹路径。")
-
 
     def parse_label(self, image_file, show_image=True):
         annotation_file = ''
         instance_coco_train_json = ''
         instance_coco_val_json = ''
+        bboxes = None
+        content = None
         image_path = os.path.join(self.image_folder_path, image_file)
         image = Image.open(image_path)
         if self.label_folder_path:
@@ -179,66 +188,47 @@ class DatasetViewer:
         可视化检测
         :return:
         '''
-        if self.image_folder_path:
-            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-            if not images:
-                st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
-                return
-
-            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
-
-            if image_file:
-                bboxes, content = self.parse_label(image_file)
-        else:
-            st.warning("请输入图像文件夹路径。")
-
+        image_file = load_images(self.image_folder_path,self.image_index)
+        if image_file:
+            self.parse_label(image_file)
 
     def visual_segmentation(self):
         '''
         可视化分割
         :return:
         '''
-        if self.image_folder_path:
-            images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-            if not images:
-                st.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
-                return
+        image_file = load_images(self.image_folder_path, self.image_index)
+        if image_file:
+            image_path = os.path.join(self.image_folder_path, image_file)
+            image = Image.open(image_path)
 
-            # self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1,value=0)
-            image_file = st.sidebar.selectbox("选择图像文件:", images, index=self.image_index)
+            if self.label_folder_path:
+                masks = get_files(self.label_folder_path, [".png", ".bmp", ".tiff"])
+                if not masks:
+                    st.warning("标签文件夹中没有找到支持的分割掩码格式。请检查路径和掩码格式。")
+                    return
 
-            if image_file:
-                image_path = os.path.join(self.image_folder_path, image_file)
-                image = Image.open(image_path)
+                mask_file = os.path.splitext(image_file)[0] + ".png"
+                if mask_file in masks:
+                    mask_path = os.path.join(self.label_folder_path, mask_file)
+                    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
 
-                if self.label_folder_path:
-                    masks = get_files(self.label_folder_path, [".png", ".bmp", ".tiff"])
-                    if not masks:
-                        st.warning("标签文件夹中没有找到支持的分割掩码格式。请检查路径和掩码格式。")
+                    if mask is None:
+                        st.warning("无法读取分割掩码。请检查掩码文件。")
                         return
 
-                    mask_file = os.path.splitext(image_file)[0] + ".png"
-                    if mask_file in masks:
-                        mask_path = os.path.join(self.label_folder_path, mask_file)
-                        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+                    if mask.shape[0] != image.height or mask.shape[1] != image.width:
+                        st.warning("图像和分割掩码的尺寸不匹配。请确保它们具有相同的尺寸。")
+                        return
 
-                        if mask is None:
-                            st.warning("无法读取分割掩码。请检查掩码文件。")
-                            return
-
-                        if mask.shape[0] != image.height or mask.shape[1] != image.width:
-                            st.warning("图像和分割掩码的尺寸不匹配。请确保它们具有相同的尺寸。")
-                            return
-
-                        blend = draw_mask(image, mask, self.colors)
-                        col1, col2 = st.columns(2)
-                        col1.image(image, caption="src", use_column_width=True)
-                        col2.image(blend, caption="dst", use_column_width=True)
-                    else:
-                        st.warning("未找到对应的分割掩码文件。请确保图像和掩码文件具有相同的文件名。")
+                    blend = draw_mask(image, mask, self.colors)
+                    col1, col2 = st.columns(2)
+                    col1.image(image, caption="src", use_column_width=True)
+                    col2.image(blend, caption="dst", use_column_width=True)
                 else:
-                    st.warning("请输入标签文件夹路径。")
+                    st.warning("未找到对应的分割掩码文件。请确保图像和掩码文件具有相同的文件名。")
+            else:
+                st.warning("请输入标签文件夹路径。")
         else:
             st.warning("请输入图像文件夹路径。")
 
