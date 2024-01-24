@@ -1,6 +1,7 @@
-
 import streamlit as st
 from datasets import load_dataset
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 
 # 加载问答数据集
 @st.cache_data
@@ -13,6 +14,17 @@ def load_qa_dataset(dataset_name, split):
 def load_mm_dataset(dataset_name, split):
     dataset = load_dataset(dataset_name, split=split)
     return dataset
+
+# 生成词云
+def generate_wordcloud(text):
+    wordcloud = WordCloud(width=800, height=400).generate(text)
+    return wordcloud
+
+def display_wordcloud(wordcloud):
+    fig, ax = plt.subplots()
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis("off")
+    st.pyplot(fig)
 
 # 主界面
 def main():
@@ -70,6 +82,13 @@ def main():
     else:
         st.image(data['image'])
         st.write(f"Caption: {data['caption']}")
+
+    # 是否生成并显示词云
+    show_wordcloud = st.sidebar.checkbox("Show Word Cloud")
+    if show_wordcloud and dataset_type == "Question-Answering":
+        text = " ".join([data['context'] for data in dataset])
+        wordcloud = generate_wordcloud(text)
+        display_wordcloud(wordcloud)
 
 if __name__ == "__main__":
     main()
