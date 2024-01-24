@@ -6,14 +6,22 @@ from wordcloud import WordCloud
 # 加载问答数据集
 @st.cache_data
 def load_qa_dataset(dataset_name, split):
-    dataset = load_dataset(dataset_name, split=split)
-    return dataset
+    try:
+        dataset = load_dataset(dataset_name, split=split)
+        return dataset
+    except Exception as e:
+        st.error(e)
+        return None
 
 # 加载多模态数据集
 @st.cache_data
 def load_mm_dataset(dataset_name, split):
-    dataset = load_dataset(dataset_name, split=split)
-    return dataset
+    try:
+        dataset = load_dataset(dataset_name, split=split)
+        return dataset
+    except Exception as e:
+        st.error(e)
+        return None
 
 # 生成词云
 def generate_wordcloud(text):
@@ -55,8 +63,11 @@ def main():
         dataset_name = st.sidebar.text_input("Enter Multimodal Dataset Name", "coco")
         dataset = load_mm_dataset(dataset_name, split)
 
-    # 显示数据集大小
-    st.write(f"Dataset Size: {len(dataset)}")
+    if dataset is not None:
+        # 显示数据集大小
+        st.write(f"Dataset Size: {len(dataset)}")
+    else:
+        return st.error(f"Dataset '{dataset_name}' not found. Please check the dataset name and try again.")
 
     # 控制数据集索引
     index = st.sidebar.number_input("Index", min_value=0, max_value=len(dataset)-1, step=1, value=st.session_state.current_index)
