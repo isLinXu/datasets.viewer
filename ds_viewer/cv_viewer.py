@@ -38,12 +38,16 @@ class DatasetViewer:
 
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
+
             if self.task_type == "检测":
                 self.edit_label = st.checkbox("编辑标签")
-                if self.edit_label:
-                    self.edit_bbox_index = st.number_input("选择要编辑的边界框索引:", min_value=0,max_value=len(self.bboxes) - 1, step=1, value=0)
+                if self.edit_label and self.bboxes is not None:
+                    self.edit_bbox_index = st.number_input("选择要编辑的边界框索引:", min_value=0,
+                                                           max_value=len(self.bboxes) - 1, step=1, value=0)
                     self.new_class_name = st.text_input("输入新的类别名称（可选）:", value="")
                     self.new_bbox = st.text_input("输入新的边界框坐标（格式：xmin,ymin,xmax,ymax，可选）:", value="")
+                elif self.edit_label and self.bboxes is None:
+                    st.warning("没有边界框可供编辑。请确保输入了正确的标签文件夹路径。")
 
             if os.path.exists(self.image_folder_path):
                 images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
@@ -91,7 +95,7 @@ class DatasetViewer:
             image = Image.open(image_path)
 
             if self.label_folder_path:
-                labels = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+                labels = get_files(self.label_folder_path, [".txt"])
 
                 if not labels:
                     st.warning("标签文件夹中没有找到支持的标签格式。请检查路径和标签格式。")
@@ -165,12 +169,8 @@ class DatasetViewer:
                         else:
                             bboxes = parse_single_json(content)
                         content = json.dumps(bboxes, indent=4)
-
+                    self.bboxes = bboxes # 保存 bboxes 到实例变量中
                     if show_image:
-                        # 保存 bboxes 到实例变量中
-                        self.bboxes = bboxes
-
-                        # image_cv = self.draw_bbox(image_cv, bboxes)
                         image_cv = draw_bbox(image_cv, bboxes)
                         col1, col2 = st.columns(2)
                         col1.image(image, caption="src", use_column_width=True)
