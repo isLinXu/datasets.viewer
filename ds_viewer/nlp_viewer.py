@@ -1,3 +1,4 @@
+import pandas as pd
 import streamlit as st
 from datasets import load_dataset
 import matplotlib.pyplot as plt
@@ -52,15 +53,27 @@ def main():
     # 选择数据集类型
     dataset_type = st.sidebar.selectbox("Select Dataset Type", ["Question-Answering", "Multimodal"])
 
+    # 选择数据集名称
+    if dataset_type == "Question-Answering":
+        dataset_name = st.sidebar.text_input("Enter QA Dataset Name", "squad")
+    else:
+        dataset_name = st.sidebar.text_input("Enter Multimodal Dataset Name", "coco")
+
+    # 获取数据集元信息
+    try:
+        dataset_info = load_dataset(dataset_name, split=None)
+        available_splits = list(dataset_info.keys())
+    except Exception as e:
+        st.error(e)
+        return None
+
     # 选择数据集分割
-    split = st.sidebar.selectbox("Select Dataset Split", ["train", "validation"])
+    split = st.sidebar.selectbox("Select Dataset Split", available_splits)
 
     # 根据选择的数据集类型加载数据
     if dataset_type == "Question-Answering":
-        dataset_name = st.sidebar.text_input("Enter QA Dataset Name", "squad")
         dataset = load_qa_dataset(dataset_name, split)
     else:
-        dataset_name = st.sidebar.text_input("Enter Multimodal Dataset Name", "coco")
         dataset = load_mm_dataset(dataset_name, split)
 
     if dataset is not None:
@@ -80,16 +93,27 @@ def main():
     # 显示选择的数据
     data = dataset[index]
     if dataset_type == "Question-Answering":
-        st.text_area("Context", value=data['context'], height=200)
-        st.write("---")
-        if not st.session_state.messages:
-            st.session_state.messages.append({"role": "user", "content": data['question'], "avatar": user_avatar})
-            st.session_state.messages.append({"role": "robot", "content": data['answers']['text'][0], "avatar": robot_avatar})
+        if 'context' not in data:
+            # st.error(f"Dataset '{dataset_name}' does not have a 'context' key. Please check the dataset name and try again.")
+            st.write(f"Dataset Keys: {list(data.keys())}")  # 显示数据集的键值结构
 
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"], avatar=message.get("avatar")):
-                st.markdown(message["content"])
+            # 将数据集转换为 DataFrame
+            df = pd.DataFrame(dataset)
 
+            # 显示 DataFrame
+            st.write(df)
+        else:
+            st.write(f"Dataset Keys: {list(data.keys())}")  # 添加这行来显示数据集的键值结构
+            st.text_area("Context", value=data['context'], height=200)
+            st.write("---")
+            if not st.session_state.messages:
+                st.session_state.messages.append({"role": "user", "content": data['question'], "avatar": user_avatar})
+                st.session_state.messages.append(
+                    {"role": "robot", "content": data['answers']['text'][0], "avatar": robot_avatar})
+
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"], avatar=message.get("avatar")):
+                    st.markdown(message["content"])
     else:
         st.image(data['image'])
         st.write(f"Caption: {data['caption']}")
