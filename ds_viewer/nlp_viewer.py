@@ -1,3 +1,4 @@
+
 import pandas as pd
 import streamlit as st
 from datasets import load_dataset
@@ -93,37 +94,46 @@ def main():
     # 显示选择的数据
     data = dataset[index]
     if dataset_type == "Question-Answering":
-        if 'context' not in data:
-            # st.error(f"Dataset '{dataset_name}' does not have a 'context' key. Please check the dataset name and try again.")
-            st.write(f"Dataset Keys: {list(data.keys())}")  # 显示数据集的键值结构
-
-            # 将数据集转换为 DataFrame
-            df = pd.DataFrame(dataset)
-
-            # 显示 DataFrame
-            st.write(df)
-        else:
-            st.write(f"Dataset Keys: {list(data.keys())}")  # 添加这行来显示数据集的键值结构
+        st.write(f"Dataset Keys: {list(data.keys())}")  # 添加这行来显示数据集的键值结构
+        if 'context' in data:
             st.text_area("Context", value=data['context'], height=200)
             st.write("---")
-            if not st.session_state.messages:
-                st.session_state.messages.append({"role": "user", "content": data['question'], "avatar": user_avatar})
-                st.session_state.messages.append(
-                    {"role": "robot", "content": data['answers']['text'][0], "avatar": robot_avatar})
+        if 'query' in data:
+            question = data['query']
+        elif 'question' in data:
+            question = data['question']
+        else:
+            question = ''
+        # if question:
+            # st.write(f"Question: {question}")
 
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"], avatar=message.get("avatar")):
-                    st.markdown(message["content"])
-    else:
-        st.image(data['image'])
-        st.write(f"Caption: {data['caption']}")
+        if 'options' in data:
+            st.write("Options:")
+            for idx, option in enumerate(data['options']):
+                st.write(f"{idx + 1}. {option}")
 
-    # 是否生成并显示词云
-    show_wordcloud = st.sidebar.checkbox("Show Word Cloud")
-    if show_wordcloud and dataset_type == "Question-Answering":
-        text = " ".join([data['context'] for data in dataset])
-        wordcloud = generate_wordcloud(text)
-        display_wordcloud(wordcloud)
+        if 'correct_option' in data:
+            answers = [data['options'][data['correct_option'] - 1]]
+        elif 'answers' in data:
+            answers = data['answers']['text']
+        else:
+            answers = []
+
+        # 更新对话记录
+        if not st.session_state.messages:
+            st.session_state.messages.append({"role": "user", "content": question, "avatar": user_avatar})
+            st.session_state.messages.append({"role": "robot", "content": answers[0], "avatar": robot_avatar})
+
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"], avatar=message.get("avatar")):
+                st.markdown(message["content"])
+
+        # 是否生成并显示词云
+        show_wordcloud = st.sidebar.checkbox("Show Word Cloud")
+        if show_wordcloud and dataset_type == "Question-Answering":
+            text = " ".join([data['context'] for data in dataset])
+            wordcloud = generate_wordcloud(text)
+            display_wordcloud(wordcloud)
 
 if __name__ == "__main__":
     main()
