@@ -124,14 +124,14 @@ class DatasetViewer:
         image_path = os.path.join(self.image_folder_path, image_file)
         image = Image.open(image_path)
         if self.label_folder_path:
-            annotations = get_files(self.label_folder_path, [".txt", ".json", ".xml"])
+            annotations = get_files(self.label_folder_path, [".txt", ".json", ".xml", "box"])
 
             if not annotations:
                 st.warning("标签文件夹中没有找到支持的标注格式。请检查路径和标注格式。")
                 return
 
             label_ext = None
-            for ext in [".txt", ".json", ".xml"]:
+            for ext in [".txt", ".json", ".xml", ".box"]:
                 if ext == ".json":
                     single_json_file = os.path.splitext(image_file)[0] + ext
                     single_json_path = os.path.join(self.label_folder_path, single_json_file)
@@ -149,11 +149,11 @@ class DatasetViewer:
                             annotation_file = instance_coco_train_json if os.path.exists(
                                 train_coco_json) else instance_coco_val_json
                             break
-                elif ext == ".xml" or ext == ".txt":
+                elif ext == ".xml" or ext == ".txt" or ext == ".box":
                     annotation_file = os.path.splitext(image_file)[0] + ext
                     if annotation_file in annotations:
                         label_ext = ext
-                        break
+                        break     
 
             if label_ext:
                 with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
@@ -161,6 +161,8 @@ class DatasetViewer:
                     image_cv = cv2.imread(image_path)
                     if label_ext == ".txt":
                         bboxes = parse_yolo(content, image_cv)
+                    elif label_ext == ".box":
+                        bboxes = parse_box(content, image_cv)
                     elif label_ext == ".xml":
                         bboxes = parse_xml(content)
                     elif label_ext == ".json":
