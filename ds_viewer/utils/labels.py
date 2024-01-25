@@ -25,6 +25,21 @@ def parse_yolo(content, image_cv):
         parsed_content.append((class_id_str, x_min, y_min, w_ori, h_ori))
     return parsed_content
 
+def parse_box(content, image_cv):
+    '''
+    解析box格式标签文件
+    :param content:
+    :param image_cv:
+    :return:
+    '''
+    lines = content.strip().split('\n')
+    parsed_content = []
+    for line in lines:
+        if line == "": continue
+        id, x1, y1, x2, y2, lable = line.strip().split()
+        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+        parsed_content.append((lable, x1, y1, x2 - x1, y2 - y1))
+    return parsed_content
 
 def parse_xml(content):
     '''
