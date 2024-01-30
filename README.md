@@ -52,10 +52,10 @@ pip3 install -r requirements.txt
 ## Usage
 
 ```shell
-streamlit run /Users/gatilin/PycharmProjects/datasets.viewer/ds_viewer/cv_viewer.py
+streamlit run ./ds_viewer/cv_viewer.py
 ```
 
 ```shell
-streamlit run /Users/gatilin/PycharmProjects/datasets.viewer/ds_viewer/nlp_viewer.py
+streamlit run ./ds_viewer/nlp_viewer.py
 ```
 
