@@ -58,9 +58,7 @@ class DatasetViewer:
                 # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
 
                 if st.sidebar.button("分析数据集"):
-                    # dataset_path = self.label_folder_path
                     dataset_path = os.path.dirname(os.path.dirname(self.label_folder_path))
-                    # dataset_path = os.path.split(dataset_path[0])
                     classes_to_analyze = None
                     class_names = None
                     self.analyze_yolo_dataset(dataset_path, classes_to_analyze, class_names)
@@ -326,18 +324,24 @@ class DatasetViewer:
                         image_counts[cls] += 1
                 total_images += 1
 
-        st.write("类别统计：")
+        # 创建一个字符串来存储分析结果
+        analysis_result = ""
+
+        analysis_result += "类别统计：\n"
         for cls, count in class_counts.items():
             class_name = class_names[cls] if class_names else cls
-            st.write(f"类别 {class_name}: {count} 个标签")
+            analysis_result += f"类别 {class_name}: {count} 个标签\n"
 
-        st.write("\n图片统计：")
+        analysis_result += "\n图片统计：\n"
         for cls, count in image_counts.items():
             class_name = class_names[cls] if class_names else cls
             average_labels = class_counts[cls] / count
-            st.write(f"类别 {class_name}: {count} 张图片 (平均每张图片 {average_labels:.2f} 个标签)")
+            analysis_result += f"类别 {class_name}: {count} 张图片 (平均每张图片 {average_labels:.2f} 个标签)\n"
 
-        st.write(f"\n总图片数量：{total_images}")
+        analysis_result += f"\n总图片数量：{total_images}\n"
+
+        # 将分析结果输出到 text_area 中
+        st.text_area("分析结果:", value=analysis_result, height=200)
     def convert_and_export_labels(self, src_format, dst_format):
         # TODO: 实现不同标签格式之间的转换，并将结果保存到指定的文件夹
         st.warning("标签格式转换功能尚未实现。")
