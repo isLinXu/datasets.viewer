@@ -1,6 +1,9 @@
+from collections import defaultdict
 
 from PIL import Image
 import sys
+
+from tqdm import tqdm
 
 sys.path.insert(0, '/utils/')
 from utils.draw import *
@@ -53,6 +56,15 @@ class DatasetViewer:
                 images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
                 self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
                 # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+
+                if st.sidebar.button("分析数据集"):
+                    # dataset_path = self.label_folder_path
+                    dataset_path = os.path.dirname(os.path.dirname(self.label_folder_path))
+                    # dataset_path = os.path.split(dataset_path[0])
+                    classes_to_analyze = None
+                    class_names = None
+                    self.analyze_yolo_dataset(dataset_path, classes_to_analyze, class_names)
+
 
                 if st.sidebar.button("保存可视化结果"):
                     if self.image_folder_path and self.image_index is not None:
@@ -282,6 +294,50 @@ class DatasetViewer:
             result_image.save(result_image_path)
             st.success(f"已保存可视化结果到：{result_image_path}")
 
+    def analyze_yolo_dataset(self, dataset_path, classes_to_analyze=None, class_names=None, splits=['train', 'test']):
+        class_counts = defaultdict(int)
+        image_counts = defaultdict(int)
+        total_images = 0
+
+        if not os.path.exists(dataset_path):
+            st.warning(f"Dataset path '{dataset_path}' does not exist.")
+            return
+
+        for split in splits:
+            split_dir = os.path.join(dataset_path, 'labels', split)
+            if not os.path.exists(split_dir):
+                st.warning(f"Split '{split}' does not exist in the dataset.")
+                continue
+
+            for label_file in tqdm(os.listdir(split_dir), desc=f"Processing {split} data"):
+                with open(os.path.join(dataset_path, 'labels', split, label_file), 'r') as f:
+                    lines = f.readlines()
+
+                if classes_to_analyze is None:
+                    found_classes = [int(line.split()[0]) for line in lines]
+                else:
+                    found_classes = [int(line.split()[0]) for line in lines if int(line.split()[0]) in classes_to_analyze]
+
+                for cls in found_classes:
+                    class_counts[cls] += 1
+
+                if found_classes:
+                    for cls in set(found_classes):
+                        image_counts[cls] += 1
+                total_images += 1
+
+        st.write("类别统计：")
+        for cls, count in class_counts.items():
+            class_name = class_names[cls] if class_names else cls
+            st.write(f"类别 {class_name}: {count} 个标签")
+
+        st.write("\n图片统计：")
+        for cls, count in image_counts.items():
+            class_name = class_names[cls] if class_names else cls
+            average_labels = class_counts[cls] / count
+            st.write(f"类别 {class_name}: {count} 张图片 (平均每张图片 {average_labels:.2f} 个标签)")
+
+        st.write(f"\n总图片数量：{total_images}")
     def convert_and_export_labels(self, src_format, dst_format):
         # TODO: 实现不同标签格式之间的转换，并将结果保存到指定的文件夹
         st.warning("标签格式转换功能尚未实现。")
