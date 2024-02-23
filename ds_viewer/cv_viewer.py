@@ -172,7 +172,7 @@ class DatasetViewer:
                     annotation_file = os.path.splitext(image_file)[0] + ext
                     if annotation_file in annotations:
                         label_ext = ext
-                        break     
+                        break
 
             if label_ext:
                 with open(os.path.join(self.label_folder_path, annotation_file), "r") as file:
@@ -255,31 +255,12 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
-    # def load_image_preview(self):
-    #     '''
-    #     加载图像预览
-    #     :return:
-    #     '''
-    #     if self.image_folder_path and self.image_index is not None:
-    #         images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-    #         if images:
-    #             image_file = images[self.image_index]
-    #             image_path = os.path.join(self.image_folder_path, image_file)
-    #             image = Image.open(image_path)
-    #             st.sidebar.image(image, caption="预览", width=100)
-    #             # 添加删除按钮
-    #             if st.sidebar.button("删除当前图像"):
-    #                 os.remove(image_path)  # 删除图像文件
-    #                 st.sidebar.success(f"已删除图像：{image_path}")
-    #         else:
-    #             st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
-
     def load_image_preview(self):
         '''
         加载图像预览
         :return:
         '''
-        global image_path
+        global image_path, image_file
         if self.image_folder_path and self.image_index is not None:
             images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
@@ -302,14 +283,38 @@ class DatasetViewer:
                     st.sidebar.image(image, caption="预览", width=100)
                 else:
                     st.sidebar.warning("所有图像均已标记为成功。")
+
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
                     st.sidebar.success(f"已删除图像：{image_path}")
+
+                    # 更新 self.image_index 的值
+                    next_index = self.image_index
+                    while next_index < len(images) - 1:
+                        next_index += 1
+                        next_image_file = images[next_index]
+                        if self.image_tags.get(next_image_file) != "成功":
+                            break
+
+                    self.image_index = next_index if next_index < len(images) - 1 else max(0, self.image_index - 1)
+
+                # 检查当前图像的标记结果，如果标记为“无”，则删除这个图像
+                if self.image_tags.get(image_file) == "无":
+                    os.remove(image_path)  # 删除图像文件
+                    st.sidebar.success(f"已删除标记为'无'的图像：{image_path}")
+
+                    # 更新 self.image_index 的值
+                    next_index = self.image_index
+                    while next_index < len(images) - 1:
+                        next_index += 1
+                        next_image_file = images[next_index]
+                        if self.image_tags.get(next_image_file) != "成功":
+                            break
+
+                    self.image_index = next_index if next_index < len(images) - 1 else max(0, self.image_index - 1)
             else:
                 st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
-
-
     def save_visual_result(self, image, task_type):
         global result_image
         save_path = os.path.join(self.image_folder_path, "visual_results")
@@ -417,3 +422,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
