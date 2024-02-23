@@ -22,6 +22,7 @@ class DatasetViewer:
         self.label_files = []
         self.task_type = ""
         self.image_index = 0
+        self.image_tags = {}
 
     def load_sidebar(self):
         '''
@@ -57,12 +58,19 @@ class DatasetViewer:
                 self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
                 # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
 
+                # 添加标记设置
+                tag_options = ["无", "成功"]
+                selected_tag = st.sidebar.selectbox("选择标记:", tag_options)
+                if st.sidebar.button("为当前图像添加/更新标记"):
+                    image_file = images[self.image_index]
+                    self.image_tags[image_file] = selected_tag
+                    st.sidebar.success(f"已为图像 {image_file} 添加/更新标记: {selected_tag}")
+
                 if st.sidebar.button("分析数据集"):
                     dataset_path = os.path.dirname(os.path.dirname(self.label_folder_path))
                     classes_to_analyze = None
                     class_names = None
                     self.analyze_yolo_dataset(dataset_path, classes_to_analyze, class_names)
-
 
                 if st.sidebar.button("保存可视化结果"):
                     if self.image_folder_path and self.image_index is not None:
@@ -99,7 +107,8 @@ class DatasetViewer:
         可视化分类
         :return:
         '''
-        image_file = load_images(self.image_folder_path, self.image_index)
+        # image_file = load_images(self.image_folder_path, self.image_index)
+        image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
         if image_file:
             image_path = os.path.join(self.image_folder_path, image_file)
             image = Image.open(image_path)
@@ -200,7 +209,8 @@ class DatasetViewer:
         可视化检测
         :return:
         '''
-        image_file = load_images(self.image_folder_path,self.image_index)
+        # image_file = load_images(self.image_folder_path,self.image_index)
+        image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
         if image_file:
             self.parse_label(image_file)
 
@@ -209,7 +219,8 @@ class DatasetViewer:
         可视化分割
         :return:
         '''
-        image_file = load_images(self.image_folder_path, self.image_index)
+        # image_file = load_images(self.image_folder_path, self.image_index)
+        image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
         if image_file:
             image_path = os.path.join(self.image_folder_path, image_file)
             image = Image.open(image_path)
@@ -244,18 +255,53 @@ class DatasetViewer:
         else:
             st.warning("请输入图像文件夹路径。")
 
+    # def load_image_preview(self):
+    #     '''
+    #     加载图像预览
+    #     :return:
+    #     '''
+    #     if self.image_folder_path and self.image_index is not None:
+    #         images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
+    #         if images:
+    #             image_file = images[self.image_index]
+    #             image_path = os.path.join(self.image_folder_path, image_file)
+    #             image = Image.open(image_path)
+    #             st.sidebar.image(image, caption="预览", width=100)
+    #             # 添加删除按钮
+    #             if st.sidebar.button("删除当前图像"):
+    #                 os.remove(image_path)  # 删除图像文件
+    #                 st.sidebar.success(f"已删除图像：{image_path}")
+    #         else:
+    #             st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
+
     def load_image_preview(self):
         '''
         加载图像预览
         :return:
         '''
+        global image_path
         if self.image_folder_path and self.image_index is not None:
             images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
-                image_file = images[self.image_index]
-                image_path = os.path.join(self.image_folder_path, image_file)
-                image = Image.open(image_path)
-                st.sidebar.image(image, caption="预览", width=100)
+                # 检查 self.image_index 是否在有效范围内
+                if self.image_index >= len(images):
+                    st.sidebar.warning("已到达图像列表的末尾。")
+                    return
+
+                # 跳过已标记为成功的图像
+                while self.image_index < len(images):
+                    image_file = images[self.image_index]
+                    if self.image_tags.get(image_file) != "成功":
+                        break
+                    self.image_index += 1
+
+                if self.image_index < len(images):
+                    image_file = images[self.image_index]
+                    image_path = os.path.join(self.image_folder_path, image_file)
+                    image = Image.open(image_path)
+                    st.sidebar.image(image, caption="预览", width=100)
+                else:
+                    st.sidebar.warning("所有图像均已标记为成功。")
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
