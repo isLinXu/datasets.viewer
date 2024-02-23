@@ -256,6 +256,10 @@ class DatasetViewer:
                 image_path = os.path.join(self.image_folder_path, image_file)
                 image = Image.open(image_path)
                 st.sidebar.image(image, caption="预览", width=100)
+                # 添加删除按钮
+                if st.sidebar.button("删除当前图像"):
+                    os.remove(image_path)  # 删除图像文件
+                    st.sidebar.success(f"已删除图像：{image_path}")
             else:
                 st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
 
