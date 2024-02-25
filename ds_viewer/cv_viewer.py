@@ -1,3 +1,5 @@
+import shutil
+
 from PIL import Image
 import sys
 sys.path.insert(0, '/utils/')
@@ -23,13 +25,15 @@ class DatasetViewer:
         self.image_tags = {}
         self.default_index = 0
         self.state_file = 'state.json'
-        # self.reset_state()
+        self.reset_state()
         self.load_state()
 
     def reset_state(self):
-        self.image_index = 0
+        if os.path.exists(self.state_file):
+            os.remove(self.state_file)
+        # self.image_index = 0
         # self.image_tags = {}
-        self.save_state()
+        # self.save_state()
     def load_state(self):
         if os.path.exists(self.state_file):
             with open(self.state_file, 'r') as f:
@@ -277,8 +281,34 @@ class DatasetViewer:
                 tag_options = ["bad", "medium", "good"]
                 selected_tag = st.sidebar.selectbox("为当前图像选择一个标记:", tag_options,
                                                     index=tag_options.index(current_tag) if current_tag else 0)
-                self.image_tags[image_file] = selected_tag
-                self.save_state()
+                # self.image_tags[image_file] = selected_tag
+                # self.save_state()
+                if st.sidebar.button("确认标记"):
+                    self.image_tags[image_file] = selected_tag
+                    self.save_state()
+                    st.sidebar.success(f"已将标记 '{selected_tag}' 应用到图像：{image_file}")
+
+                # 批量删除标记为"bad"的图片
+                if st.sidebar.button("批量删除标记为'bad'的图片"):
+                    for image_file, tag in self.image_tags.items():
+                        if tag == "bad":
+                            image_path = os.path.join(self.image_folder_path, image_file)
+                            if os.path.exists(image_path):
+                                os.remove(image_path)
+                    st.sidebar.success("已删除所有标记为'bad'的图片" ,'共计', len(self.image_tags), '张图片已删除。')
+
+                # 批量导出标记为"good"的图片
+                if st.sidebar.button("批量导出标记为'good'的图片"):
+                    export_folder = os.path.join(self.image_folder_path, "good_images")
+                    if not os.path.exists(export_folder):
+                        os.makedirs(export_folder)
+
+                    for image_file, tag in self.image_tags.items():
+                        if tag == "good":
+                            src_image_path = os.path.join(self.image_folder_path, image_file)
+                            dst_image_path = os.path.join(export_folder, image_file)
+                            shutil.copy(src_image_path, dst_image_path)
+                    st.sidebar.success(f"已将所有标记为'good'的图片导出到：{export_folder}", f"共计{len(self.image_tags)}张图片已导出。")
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
