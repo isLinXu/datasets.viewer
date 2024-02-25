@@ -1,0 +1,13 @@
+# aug.yaml
+data_aug:
+  hsv_h: 0.0138
+  hsv_s: 0.664
+  hsv_v: 0.464
+  degrees: 0.373
+  translate: 0.245
+  scale: 0.898
+  shear: 0.602
+  flipud: 0.00856
+  fliplr: 0.5
+  mosaic: 1.0
+  mixup: 0.243

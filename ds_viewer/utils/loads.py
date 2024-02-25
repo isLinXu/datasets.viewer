@@ -3,7 +3,7 @@ import shutil
 
 from PIL import Image
 
-from .aug import rotate_image
+from .augment import rotate_image
 from .tools import get_files
 
 

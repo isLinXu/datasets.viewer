@@ -2,13 +2,13 @@ import os
 
 import cv2
 import numpy as np
+import yaml
 from PIL import Image
 import sys
-
+import imgaug.augmenters as iaa
+from PIL import Image
 from streamlit import number_input, button
 
-from .aug import rotate_image
-# sys.path.insert(0, './')
 from .draw import draw_bbox, draw_mask
 from .parse import parse_label
 from .tools import get_files, load_images
@@ -131,14 +131,58 @@ def visual_classification(state, st):
         st.warning("请输入图像文件夹路径。")
 
 
+def read_yaml(file_path):
+    with open(file_path, "r") as f:
+        return yaml.safe_load(f)
+
+
 def visual_data_aug(state, st):
+    # 读取aug.yaml文件
+    aug_params = read_yaml("aug.yaml")["data_aug"]
+
     image_file = load_images(state.image_folder_path, state.image_index, state.image_tags)
-    rotation_angle = number_input("输入旋转角度（0-360）:", min_value=0, max_value=360, step=1, value=0)
     if image_file:
         image_path = os.path.join(state.image_folder_path, image_file)
         image = Image.open(image_path)
-        col1, col2 = st.columns(2)
-        col1.image(image, caption="src", use_column_width=True)
-        if button("应用旋转增强并显示结果"):
-            rotated_image = rotate_image(image, rotation_angle)
-            col2.image(rotated_image, caption="旋转增强结果", use_column_width=True)
+
+        # 使用aug.yaml文件中的参数初始化数据增强选项
+        rotation_angle = st.number_input("输入旋转角度（0-360）:", min_value=0, max_value=360, step=1,
+                                         value=int(aug_params["degrees"] * 360))
+        flip_horizontal = st.checkbox("水平翻转", value=aug_params["fliplr"] > 0.5)
+        flip_vertical = st.checkbox("垂直翻转", value=aug_params["flipud"] > 0.5)
+        scale = st.slider("缩放比例（0.1-2.0）:", min_value=0.1, max_value=2.0, step=0.1, value=aug_params["scale"])
+        brightness = st.slider("亮度调整（-0.5-0.5）:", min_value=-0.5, max_value=0.5, step=0.1,
+                               value=aug_params["hsv_v"] - 0.5)
+        contrast = st.slider("对比度调整（0.5-2.0）:", min_value=0.5, max_value=2.0, step=0.1, value=aug_params["hsv_s"])
+        # 添加更多数据增强选项，如噪声、模糊、锐化等
+        add_noise = st.checkbox("添加噪声")
+        gaussian_blur = st.checkbox("高斯模糊")
+        sharpen = st.checkbox("锐化")
+        hue_and_saturation = st.checkbox("色调和饱和度调整")
+        if st.button("应用数据增强并显示结果"):
+            # 创建数据增强序列
+            aug_seq = iaa.Sequential([
+                iaa.Rotate(rotation_angle),
+                iaa.Fliplr(flip_horizontal),
+                iaa.Flipud(flip_vertical),
+                iaa.ScaleX(scale),
+                iaa.ScaleY(scale),
+                iaa.Add(brightness * 255),
+                iaa.contrast.LinearContrast(alpha=contrast),
+                # 添加更多数据增强方法，如噪声、模糊、锐化等
+                iaa.GaussianBlur(sigma=3.0) if gaussian_blur else iaa.Noop(),
+                iaa.Sharpen(alpha=0.5) if sharpen else iaa.Noop(),
+                iaa.MultiplyHueAndSaturation((0.5, 1.5), per_channel=True) if hue_and_saturation else iaa.Noop()
+            ])
+
+
+            # 应用数据增强
+            augmented_image = aug_seq(image=np.array(image))
+
+
+            # 显示原始图像和增强图像
+            col1, col2 = st.columns(2)
+            col1.image(image, caption="原始图像", use_column_width=True)
+            col2.image(augmented_image, caption="增强结果", use_column_width=True)
+    else:
+        st.warning("请输入图像文件夹路径。")
