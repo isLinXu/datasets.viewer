@@ -25,15 +25,12 @@ class DatasetViewer:
         self.image_tags = {}
         self.default_index = 0
         self.state_file = 'state.json'
-        self.reset_state()
+        # self.reset_state()
         self.load_state()
 
     def reset_state(self):
         if os.path.exists(self.state_file):
             os.remove(self.state_file)
-        # self.image_index = 0
-        # self.image_tags = {}
-        # self.save_state()
     def load_state(self):
         if os.path.exists(self.state_file):
             with open(self.state_file, 'r') as f:
@@ -281,8 +278,6 @@ class DatasetViewer:
                 tag_options = ["bad", "medium", "good"]
                 selected_tag = st.sidebar.selectbox("为当前图像选择一个标记:", tag_options,
                                                     index=tag_options.index(current_tag) if current_tag else 0)
-                # self.image_tags[image_file] = selected_tag
-                # self.save_state()
                 if st.sidebar.button("确认标记"):
                     self.image_tags[image_file] = selected_tag
                     self.save_state()
@@ -295,7 +290,7 @@ class DatasetViewer:
                             image_path = os.path.join(self.image_folder_path, image_file)
                             if os.path.exists(image_path):
                                 os.remove(image_path)
-                    st.sidebar.success("已删除所有标记为'bad'的图片" ,'共计', len(self.image_tags), '张图片已删除。')
+                    st.sidebar.success(f"已删除所有标记为'bad'的图片,共计{len(self.image_tags)}张图片已删除。")
 
                 # 批量导出标记为"good"的图片
                 if st.sidebar.button("批量导出标记为'good'的图片"):
@@ -308,13 +303,18 @@ class DatasetViewer:
                             src_image_path = os.path.join(self.image_folder_path, image_file)
                             dst_image_path = os.path.join(export_folder, image_file)
                             shutil.copy(src_image_path, dst_image_path)
-                    st.sidebar.success(f"已将所有标记为'good'的图片导出到：{export_folder}", f"共计{len(self.image_tags)}张图片已导出。")
+                    st.sidebar.success(f"已将所有标记为'good'的图片导出到：{export_folder}，共计{len(self.image_tags)}张图片已导出。")
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
                     st.sidebar.success(f"已删除图像：{image_path}")
                     self.image_index = self.image_index if self.image_index < len(images) - 1 else self.image_index - 1
                     self.save_state()
+                # 添加重置按钮
+                if st.sidebar.button("重置状态"):
+                    self.reset_state()
+                    st.sidebar.success("已重置状态。")
+
             else:
                 st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
 
