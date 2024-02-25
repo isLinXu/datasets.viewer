@@ -20,21 +20,30 @@ class DatasetViewer:
         self.task_type = ""
         self.image_index = 0
         self.image_files_index = []
+        self.image_tags = {}
         self.default_index = 0
         self.state_file = 'state.json'
+        # self.reset_state()
         self.load_state()
 
+    def reset_state(self):
+        self.image_index = 0
+        # self.image_tags = {}
+        self.save_state()
     def load_state(self):
         if os.path.exists(self.state_file):
             with open(self.state_file, 'r') as f:
                 state = json.load(f)
-                self.image_index = state.get('image_index', 0)
+                self.image_index = state.get('image_index')
+                self.image_tags = state.get('image_tags')
         else:
             self.image_index = 0
+            self.image_tags = {}
+
 
     def save_state(self):
         with open(self.state_file, 'w') as f:
-            json.dump({'image_index': self.image_index}, f)
+            json.dump({'image_index': self.image_index, 'image_tags': self.image_tags}, f, indent=4)
 
     def load_sidebar(self):
         with st.sidebar:
@@ -259,9 +268,17 @@ class DatasetViewer:
             images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
                 image_file = images[self.image_index]
+
                 image_path = os.path.join(self.image_folder_path, image_file)
                 image = Image.open(image_path)
                 st.sidebar.image(image, caption="预览", width=100)
+                # 添加标记按钮
+                current_tag = self.image_tags.get(image_file)
+                tag_options = ["bad", "medium", "good"]
+                selected_tag = st.sidebar.selectbox("为当前图像选择一个标记:", tag_options,
+                                                    index=tag_options.index(current_tag) if current_tag else 0)
+                self.image_tags[image_file] = selected_tag
+                self.save_state()
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
