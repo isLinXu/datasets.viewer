@@ -18,7 +18,7 @@ def load_sidebar(state, st):
         num_classes = len(state.class_names) if state.class_names else 100
         state.colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(num_classes)]
 
-        task_options = ["分类", "检测", "分割"]
+        task_options = ["分类", "检测", "分割", "增强"]
         state.task_type = st.selectbox("选择任务类型:", task_options)
 
         if state.task_type == "检测":

@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import sys
+
+from streamlit import number_input, button
+
+from .aug import rotate_image
 # sys.path.insert(0, './')
 from .draw import draw_bbox, draw_mask
 from .parse import parse_label
@@ -127,34 +131,14 @@ def visual_classification(state, st):
         st.warning("请输入图像文件夹路径。")
 
 
-def save_visual_result(state, st, image):
-        global result_image
-        save_path = os.path.join(state.image_folder_path, "visual_results")
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        if state.image_folder_path and state.image_index is not None:
-            images = get_files(state.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-            if images:
-                image_file = images[state.image_index]
-                # "分类", "检测", "分割"
-                if state.task_type == "分类":
-                    result_image = image
-                elif state.task_type == "检测":
-                    bboxes, content = parse_label(state, st, image_file, show_image=False)
-                    image_path = os.path.join(state.image_folder_path, image_file)
-                    image_cv = cv2.imread(image_path)
-                    image_cv = cv2.cvtColor(image_cv, cv2.COLOR_RGB2BGR)
-                    result_image = draw_bbox(image_cv, bboxes)
-                    result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
-                elif state.task_type == "分割":
-                    # todo: 读取分割掩码
-                    image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-                    result_image = draw_mask(image_cv, state.mask, state.colors)
-                    result_image = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
-                else:
-                    st.warning("未知的任务类型。结果图像未被保存。")
-
-            result_image = Image.fromarray(result_image)
-            result_image_path = os.path.join(save_path, f"{state.task_type}_result_{state.image_index}.png")
-            result_image.save(result_image_path)
-            st.success(f"已保存可视化结果到：{result_image_path}")
+def visual_data_aug(state, st):
+    image_file = load_images(state.image_folder_path, state.image_index, state.image_tags)
+    rotation_angle = number_input("输入旋转角度（0-360）:", min_value=0, max_value=360, step=1, value=0)
+    if image_file:
+        image_path = os.path.join(state.image_folder_path, image_file)
+        image = Image.open(image_path)
+        col1, col2 = st.columns(2)
+        col1.image(image, caption="src", use_column_width=True)
+        if button("应用旋转增强并显示结果"):
+            rotated_image = rotate_image(image, rotation_angle)
+            col2.image(rotated_image, caption="旋转增强结果", use_column_width=True)

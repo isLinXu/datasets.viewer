@@ -2,6 +2,8 @@ import os
 import shutil
 
 from PIL import Image
+
+from .aug import rotate_image
 from .tools import get_files
 
 
@@ -18,6 +20,7 @@ def load_image_preview(state, st):
             image_path = os.path.join(state.image_folder_path, image_file)
             image = Image.open(image_path)
             st.sidebar.image(image, caption="预览", width=100)
+
             # 添加标记按钮
             current_tag = state.image_tags.get(image_file)
             tag_options = ["bad", "medium", "good"]
