@@ -23,6 +23,9 @@ class DatasetViewer:
         elif state.task_type == "分割":
             visual_segmentation(state, st)
             load_image_preview(state, st)
+        elif state.task_type == '增强':
+            visual_data_aug(state, st)
+            load_image_preview(state, st)
         else:
             st.warning("请选择任务类型")
 def main():
