@@ -1,17 +1,14 @@
-from collections import defaultdict
-
 from PIL import Image
 import sys
-
-from tqdm import tqdm
-
 sys.path.insert(0, '/utils/')
 from utils.draw import *
 from utils.labels import *
 from utils.tools import *
+from utils.analyze import *
 
 class DatasetViewer:
     def __init__(self):
+        self.image_tags = None
         self.bboxes = None
         self.mask = None
         self.image_folder_path = ""
@@ -22,13 +19,24 @@ class DatasetViewer:
         self.label_files = []
         self.task_type = ""
         self.image_index = 0
-        self.image_tags = {}
+        self.image_files_index = []
+        self.default_index = 0
+        self.state_file = 'state.json'
+        self.load_state()
+
+    def load_state(self):
+        if os.path.exists(self.state_file):
+            with open(self.state_file, 'r') as f:
+                state = json.load(f)
+                self.image_index = state.get('image_index', 0)
+        else:
+            self.image_index = 0
+
+    def save_state(self):
+        with open(self.state_file, 'w') as f:
+            json.dump({'image_index': self.image_index}, f)
 
     def load_sidebar(self):
-        '''
-        加载侧边栏
-        :return:
-        '''
         with st.sidebar:
             st.header("设置")
             self.image_folder_path = st.text_input("输入图像文件夹路径:", value="")
@@ -37,8 +45,7 @@ class DatasetViewer:
             if class_names:
                 self.class_names = [name.strip() for name in class_names.split(",")]
             num_classes = len(self.class_names) if self.class_names else 100
-            self.colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in
-                           range(num_classes)]
+            self.colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(num_classes)]
 
             task_options = ["分类", "检测", "分割"]
             self.task_type = st.selectbox("选择任务类型:", task_options)
@@ -55,22 +62,13 @@ class DatasetViewer:
 
             if os.path.exists(self.image_folder_path):
                 images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
-                self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1, step=1, value=0)
-                # self.confidence_threshold = st.slider("设置置信度阈值:", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
-
-                # 添加标记设置
-                tag_options = ["无", "成功"]
-                selected_tag = st.sidebar.selectbox("选择标记:", tag_options)
-                if st.sidebar.button("为当前图像添加/更新标记"):
-                    image_file = images[self.image_index]
-                    self.image_tags[image_file] = selected_tag
-                    st.sidebar.success(f"已为图像 {image_file} 添加/更新标记: {selected_tag}")
-
+                self.image_index = st.sidebar.number_input("选择图像文件索引:", min_value=0, max_value=len(images) - 1,
+                                                           step=1, value=self.image_index)
                 if st.sidebar.button("分析数据集"):
                     dataset_path = os.path.dirname(os.path.dirname(self.label_folder_path))
                     classes_to_analyze = None
                     class_names = None
-                    self.analyze_yolo_dataset(dataset_path, classes_to_analyze, class_names)
+                    analyze_yolo_dataset(dataset_path, classes_to_analyze, class_names)
 
                 if st.sidebar.button("保存可视化结果"):
                     if self.image_folder_path and self.image_index is not None:
@@ -107,7 +105,6 @@ class DatasetViewer:
         可视化分类
         :return:
         '''
-        # image_file = load_images(self.image_folder_path, self.image_index)
         image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
         if image_file:
             image_path = os.path.join(self.image_folder_path, image_file)
@@ -209,8 +206,7 @@ class DatasetViewer:
         可视化检测
         :return:
         '''
-        # image_file = load_images(self.image_folder_path,self.image_index)
-        image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
+        image_file = load_images(self.image_folder_path,self.image_index, self.image_tags)
         if image_file:
             self.parse_label(image_file)
 
@@ -219,7 +215,6 @@ class DatasetViewer:
         可视化分割
         :return:
         '''
-        # image_file = load_images(self.image_folder_path, self.image_index)
         image_file = load_images(self.image_folder_path, self.image_index, self.image_tags)
         if image_file:
             image_path = os.path.join(self.image_folder_path, image_file)
@@ -260,61 +255,23 @@ class DatasetViewer:
         加载图像预览
         :return:
         '''
-        global image_path, image_file
         if self.image_folder_path and self.image_index is not None:
             images = get_files(self.image_folder_path, [".jpg", ".png", ".jpeg", ".bmp", ".tiff"])
             if images:
-                # 检查 self.image_index 是否在有效范围内
-                if self.image_index >= len(images):
-                    st.sidebar.warning("已到达图像列表的末尾。")
-                    return
-
-                # 跳过已标记为成功的图像
-                while self.image_index < len(images):
-                    image_file = images[self.image_index]
-                    if self.image_tags.get(image_file) != "成功":
-                        break
-                    self.image_index += 1
-
-                if self.image_index < len(images):
-                    image_file = images[self.image_index]
-                    image_path = os.path.join(self.image_folder_path, image_file)
-                    image = Image.open(image_path)
-                    st.sidebar.image(image, caption="预览", width=100)
-                else:
-                    st.sidebar.warning("所有图像均已标记为成功。")
-
+                image_file = images[self.image_index]
+                image_path = os.path.join(self.image_folder_path, image_file)
+                image = Image.open(image_path)
+                st.sidebar.image(image, caption="预览", width=100)
                 # 添加删除按钮
                 if st.sidebar.button("删除当前图像"):
                     os.remove(image_path)  # 删除图像文件
                     st.sidebar.success(f"已删除图像：{image_path}")
-
-                    # 更新 self.image_index 的值
-                    next_index = self.image_index
-                    while next_index < len(images) - 1:
-                        next_index += 1
-                        next_image_file = images[next_index]
-                        if self.image_tags.get(next_image_file) != "成功":
-                            break
-
-                    self.image_index = next_index if next_index < len(images) - 1 else max(0, self.image_index - 1)
-
-                # 检查当前图像的标记结果，如果标记为“无”，则删除这个图像
-                if self.image_tags.get(image_file) == "无":
-                    os.remove(image_path)  # 删除图像文件
-                    st.sidebar.success(f"已删除标记为'无'的图像：{image_path}")
-
-                    # 更新 self.image_index 的值
-                    next_index = self.image_index
-                    while next_index < len(images) - 1:
-                        next_index += 1
-                        next_image_file = images[next_index]
-                        if self.image_tags.get(next_image_file) != "成功":
-                            break
-
-                    self.image_index = next_index if next_index < len(images) - 1 else max(0, self.image_index - 1)
+                    self.image_index = self.image_index if self.image_index < len(images) - 1 else self.image_index - 1
+                    self.save_state()
             else:
                 st.sidebar.warning("图像文件夹中没有找到支持的图像格式。请检查路径和图像格式。")
+
+
     def save_visual_result(self, image, task_type):
         global result_image
         save_path = os.path.join(self.image_folder_path, "visual_results")
@@ -347,56 +304,7 @@ class DatasetViewer:
             result_image.save(result_image_path)
             st.success(f"已保存可视化结果到：{result_image_path}")
 
-    def analyze_yolo_dataset(self, dataset_path, classes_to_analyze=None, class_names=None, splits=['train', 'test']):
-        class_counts = defaultdict(int)
-        image_counts = defaultdict(int)
-        total_images = 0
 
-        if not os.path.exists(dataset_path):
-            st.warning(f"Dataset path '{dataset_path}' does not exist.")
-            return
-
-        for split in splits:
-            split_dir = os.path.join(dataset_path, 'labels', split)
-            if not os.path.exists(split_dir):
-                st.warning(f"Split '{split}' does not exist in the dataset.")
-                continue
-
-            for label_file in tqdm(os.listdir(split_dir), desc=f"Processing {split} data"):
-                with open(os.path.join(dataset_path, 'labels', split, label_file), 'r') as f:
-                    lines = f.readlines()
-
-                if classes_to_analyze is None:
-                    found_classes = [int(line.split()[0]) for line in lines]
-                else:
-                    found_classes = [int(line.split()[0]) for line in lines if int(line.split()[0]) in classes_to_analyze]
-
-                for cls in found_classes:
-                    class_counts[cls] += 1
-
-                if found_classes:
-                    for cls in set(found_classes):
-                        image_counts[cls] += 1
-                total_images += 1
-
-        # 创建一个字符串来存储分析结果
-        analysis_result = ""
-
-        analysis_result += "类别统计：\n"
-        for cls, count in class_counts.items():
-            class_name = class_names[cls] if class_names else cls
-            analysis_result += f"类别 {class_name}: {count} 个标签\n"
-
-        analysis_result += "\n图片统计：\n"
-        for cls, count in image_counts.items():
-            class_name = class_names[cls] if class_names else cls
-            average_labels = class_counts[cls] / count
-            analysis_result += f"类别 {class_name}: {count} 张图片 (平均每张图片 {average_labels:.2f} 个标签)\n"
-
-        analysis_result += f"\n总图片数量：{total_images}\n"
-
-        # 将分析结果输出到 text_area 中
-        st.text_area("分析结果:", value=analysis_result, height=200)
     def convert_and_export_labels(self, src_format, dst_format):
         # TODO: 实现不同标签格式之间的转换，并将结果保存到指定的文件夹
         st.warning("标签格式转换功能尚未实现。")
@@ -422,4 +330,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
