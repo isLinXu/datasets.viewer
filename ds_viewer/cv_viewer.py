@@ -10,9 +10,7 @@ class DatasetViewer:
         self.state = State()
         self.st = st
     def loads(self):
-        state = self.state
-        st = self.st
-        load_sidebar(state, st)
+        load_sidebar(self.state, self.st)
     def visual(self):
         state = self.state
         st = self.st
