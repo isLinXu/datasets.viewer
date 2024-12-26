@@ -9,22 +9,22 @@ class DatasetViewer:
     def __init__(self):
         self.state = State()
         self.st = st
+
     def loads(self):
         load_sidebar(self.state, self.st)
+
     def visual(self):
         state = self.state
         st = self.st
-        if state.task_type == "分类":
-            visual_classification(state, st)
-            load_image_preview(state, st)
-        elif state.task_type == "检测":
-            visual_detection(state, st)
-            load_image_preview(state, st)
-        elif state.task_type == "分割":
-            visual_segmentation(state, st)
-            load_image_preview(state, st)
-        elif state.task_type == '增强':
-            visual_data_aug(state, st)
+        task_visualization = {
+            "分类": visual_classification,
+            "检测": visual_detection,
+            "分割": visual_segmentation,
+            "增强": visual_data_aug
+        }
+        visual_function = task_visualization.get(state.task_type)
+        if visual_function:
+            visual_function(state, st)
             load_image_preview(state, st)
         else:
             st.warning("请选择任务类型")
